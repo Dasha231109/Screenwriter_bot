@@ -5,6 +5,9 @@ import telebot
 from telebot import TeleBot
 from telebot.types import ReplyKeyboardMarkup
 from config import *
+from limitation import *
+import datetime
+
 # from gpt import GPT
 # from database import *
 
@@ -40,10 +43,7 @@ genres = ['Комедия', 'Детектив', 'Мистика']
 main_characters = ['Буратино', 'Крош', 'Шерлок Хомс', 'Мисс Марпл', 'Аннабель', 'Волан де Морт']
 locations = ['Пятерочка', 'Домик в деревне', 'Заколдованный замок']
 
-current_genres = {}
-current_characters = {}
-current_locations = {}
-information = {}
+current_choose = {}
 
 
 # ---------------------------------------------------------БОТ----------------------------------------------------------
@@ -55,6 +55,9 @@ def create_keyboard(buttons_list):
 
 @bot.message_handler(commands=['start', 'help'])
 def commands(message):
+    if is_limit_users():
+        bot.send_message(message.chat.id, "Извините, но количество пользователей превышено. Бот не доступен.")
+        exit()
     if message.text == '/start':
         name_user = message.from_user.first_name
         logging.info("Отправка приветственного сообщения")
@@ -77,6 +80,19 @@ def commands(message):
 
 @bot.message_handler(commands=['new_story'])
 def story(message):
+    logging.info('Новая история')
+    user_id = message.from_user.id
+    time = datetime.time
+    print(time)
+
+    create_db()
+    logging.info('Создали бд')
+    create_table(DB_TABLE_USERS_NAME)
+    logging.info('Создали таблицу если ее нет')
+    values = [user_id, 'None', 'None', time, 0, 0]
+    insert_row(values)
+    logging.info('Записали значения')
+
     bot.send_message(message.chat.id, text='Хорошо, давайте начнем! Какой жанр истории вы бы хотели?',
                      reply_markup=create_keyboard(genres))
     bot.register_next_step_handler(message, choose_genre)
@@ -86,66 +102,93 @@ def choose_genre(message):
     user_id = message.from_user.id
     genre = message.text
 
-    if genre in genres:
-        current_genres[user_id] = genre
-        print(current_genres)
-        bot.send_message(message.chat.id, text='Хорошо, выбери главного героя',
-                         reply_markup=create_keyboard(main_characters))
-        bot.register_next_step_handler(message, choose_characters)
-    else:
+    if genre not in genres:
+        logging.info('Пользователь ввел не жанр')
         bot.send_message(message.chat.id, text="Пожалуйста выберите один из предложенных вариантов",
                          reply_markup=create_keyboard(genres))
         bot.register_next_step_handler(message, choose_genre)
+        return
+
+    current_choose[user_id] = {}
+    current_choose[user_id]['genre'] = genre
+    logging.info('Сохранили жанр в словарь')
+    print(current_choose)
+
+    bot.send_message(message.chat.id, text='Хорошо, выберите главного героя',
+                     reply_markup=create_keyboard(main_characters))
+    bot.register_next_step_handler(message, choose_characters)
 
 
 def choose_characters(message):
     user_id = message.from_user.id
     character = message.text
 
-    if character in main_characters:
-        current_characters[user_id] = character
-        print(current_characters)
-        bot.send_message(message.chat.id, text='Отличный выбор, выбери сеттинг:\n'
-                                               '1) Пятерочка - cтрашный магазин, полон ужасов, находится один в '
-                                               'дремучем лесу.\n'
-                                               '2) Домик в деревне - маленький уютный домик, рядом растут деревья и '
-                                               'протекает река.\n'
-                                               '3) Заколдованный Замок - древнее место, окутанное тайнами и '
-                                               'легендами, находится в центре города.',
-                         reply_markup=create_keyboard(locations))
-        bot.register_next_step_handler(message, choose_locations)
-    else:
+    if character not in main_characters:
+        logging.info('Пользователь ввел не персонажа')
         bot.send_message(message.chat.id, text="Пожалуйста выберите один из предложенных вариантов",
                          reply_markup=create_keyboard(main_characters))
         bot.register_next_step_handler(message, choose_characters)
+
+    current_choose[user_id]['character'] = character
+    logging.info('Сохранили персонажа в словарь')
+    print(current_choose)
+
+    bot.send_message(message.chat.id, text='Отличный выбор, выберите сеттинг:\n'
+                                           '1) Пятерочка - cтрашный магазин, полон ужасов, находится один в '
+                                           'дремучем лесу.\n'
+                                           '2) Домик в деревне - маленький уютный домик, рядом растут деревья и '
+                                           'протекает река.\n'
+                                           '3) Заколдованный Замок - древнее место, окутанное тайнами и '
+                                           'легендами, находится в центре города.',
+                     reply_markup=create_keyboard(locations))
+    bot.register_next_step_handler(message, choose_locations)
 
 
 def choose_locations(message):
     user_id = message.from_user.id
     location = message.text
 
-    if location in locations:
-        current_locations[user_id] = location
-        print(current_locations)
-        bot.send_message(message.chat.id, "Супер! Получится крутая история, а чтобы она получилась еще круче можешь "
-                                          "написать дополнительную информацию. Если хочешь уже начать пиши /begin")
-        bot.register_next_step_handler(message, add_info)
-    else:
+    if location not in locations:
+        logging.info('Пользователь ввел не сеттинг')
         bot.send_message(message.chat.id, text="Пожалуйста выберите один из предложенных вариантов",
                          reply_markup=create_keyboard(locations))
         bot.register_next_step_handler(message, choose_locations)
 
+    current_choose[user_id]['location'] = location
+    logging.info('Сохранили сеттинг в словарь')
+    print(current_choose)
+
+    bot.send_message(message.chat.id, text="Супер! Получится крутая история, а чтобы она получилась еще круче можешь "
+                                           "написать дополнительную информацию. Если хочешь уже начать пиши /begin",
+                     reply_markup=create_keyboard(['/begin']))
+    bot.register_next_step_handler(message, add_info)
+
 
 def add_info(message):
     user_id = message.from_user.id
-    info = str(message.text)
-    if info != "/begin":
-        information[user_id] = info
-        print(information)
-        bot.send_message(message.chat.id, 'Отлично, вся информация будет учтена в истории. Чтобы начать введите /begin')
+    info = message.text
+
+    if info != '/begin':
+        current_choose[user_id]['info'] = info
+        logging.info('Сохранили доп. инфо. в словарь')
+        print(current_choose)
+        bot.send_message(message.chat.id, text='Отлично, вся информация будет учтена в истории. Чтобы начать введите '
+                                               '/begin',
+                         reply_markup=create_keyboard(['/begin']))
     else:
-        information[user_id] = None
-        print(information)
+        begin_story(message)
+
+
+@bot.message_handler(commands=['begin'])
+def begin_story(message):
+    user_id = message.from_user.id
+    info = str(message.text)
+
+    if info != "/begin":
+        create_keyboard()
+    else:
+        current_choose[user_id]['info'] = None
+        print(current_choose)
 
 
 bot.infinity_polling()
