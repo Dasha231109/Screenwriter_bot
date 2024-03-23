@@ -1,7 +1,8 @@
+import sqlite3
+
 import requests
 from config import *
 from database import *
-
 
 
 def is_limit_users():  # лимит юзеров
@@ -18,7 +19,7 @@ def is_limit_sessions_id(user_id):  # лимит сессий
 
     session_id = get_data_for_user(user_id, "session_id")[0][0]
 
-    return session_id == MAX_SESSIONS or session_id > MAX_SESSIONS
+    return session_id == MAX_SESSIONS - 1 or session_id >= MAX_SESSIONS
 
 
 def is_limit_tokens(user_id, tokens):
@@ -28,30 +29,30 @@ def is_limit_tokens(user_id, tokens):
     return tokens > MAX_TOKENS
 
 
-def count_tokens_in_dialogue(messages: list) -> int:
-    url = 'https://llm.api.cloud.yandex.net/foundationModels/v1/tokenizeCompletion'
+def count_tokens_in_dialogue(messages: sqlite3.Row):
     headers = {
         'Authorization': f'Bearer {iam_token}',
         'Content-Type': 'application/json'
     }
-
     data = {
-       "modelUri": f"gpt://{folder_id}/yandexgpt-lite/latest",
+       "modelUri": f"gpt://{folder_id}/yandexgpt/latest",
        "maxTokens": MAX_MODEL_TOKENS,
        "messages": []
     }
 
     for row in messages:
+        print(messages, 'limi2')
+        print(row, 'limi1')
         data["messages"].append(
             {
                 "role": row["role"],
-                "text": row["text"]
+                "text": row["content"]
             }
         )
 
     return len(
         requests.post(
-            url,
+            "https://llm.api.cloud.yandex.net/foundationModels/v1/tokenizeCompletion",
             json=data,
             headers=headers
         ).json()["tokens"]

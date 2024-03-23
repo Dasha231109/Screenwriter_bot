@@ -76,12 +76,6 @@ def distinct_data():
     return execute_selection_query(sql_query)
 
 
-def update_row_value(user_id, column_name, new_value, column_name1, value):
-    if is_value_in_table(DB_TABLE_USERS_NAME, 'user_id', user_id):
-        update = f'''UPDATE {DB_TABLE_USERS_NAME} SET {column_name} = ? WHERE {column_name1} = ?'''
-        execute_query(update, (new_value, value,))
-
-
 def get_data_for_user(user_id, column_name):
     if is_value_in_table(DB_TABLE_USERS_NAME, 'user_id', user_id):
         receive = f'''SELECT {column_name} FROM {DB_TABLE_USERS_NAME} WHERE user_id = ? ORDER BY date DESC LIMIT 1'''
@@ -91,7 +85,7 @@ def get_data_for_user(user_id, column_name):
 # def get_row_by_user_id()  # получить последнюю строку юзера
 def get_dialogue_for_user(user_id, session_id):  # получить все промты из определённой сессии
     if is_value_in_table(DB_TABLE_USERS_NAME, 'user_id', user_id):
-        sql_query = f'''SELECT * FROM {DB_TABLE_USERS_NAME}
+        sql_query = f'''SELECT content FROM {DB_TABLE_USERS_NAME}
          WHERE user_id = ? AND tokens IS NOT NULL AND session_id = ?
          ORDER BY date ASC'''
         return execute_selection_query(sql_query, (user_id, session_id, ))

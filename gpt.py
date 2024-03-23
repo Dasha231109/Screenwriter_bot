@@ -1,27 +1,30 @@
 import logging
-from limitation import *
 import requests
 from config import *
 
 
-def create_prompt(current_choose, user_id):
+def create_prompt(user_data, user_id):
     prompt = SYSTEM_PROMPT
+    try:
+        prompt += 'Комедия, Крош, Пятерочка'  # (f"\nНапиши начало истории в стиле {user_data[user_id]['genre']} "
+        #            f"с главным героем {user_data[user_id]['character']}. "
+        #            f"Вот начальный сеттинг: \n{user_data[user_id]['location']}. \n"
+        #            "Начало должно быть коротким, 1-3 предложения.\n")
 
-    prompt += (f"\nНапиши начало истории в стиле {current_choose[user_id]['genre']} "
-               f"с главным героем {current_choose[user_id]['character']}. "
-               f"Вот начальный сеттинг: \n{current_choose[user_id]['location']}. \n"
-               "Начало должно быть коротким, 1-3 предложения.\n")
+        logging.info('Создали промт на основе данных пользователя')
+        if user_data[user_id]['info']:
+            logging.info('Если юзер писал доп. инфо. также добавили в промт')
+            prompt += (f"Также пользователь попросил учесть "
+                       f"следующую дополнительную информацию: {user_data[user_id]['info']}. ")
 
-    if current_choose[user_id]['info']:
-        prompt += (f"Также пользователь попросил учесть "
-                   f"следующую дополнительную информацию: {current_choose[user_id]['info']} ")
-
-    prompt += 'Не пиши никакие подсказки пользователю, что делать дальше. Он сам знает'
-
-    return prompt
+        prompt += 'Не пиши никакие подсказки пользователю, что делать дальше. Он сам знает'
+        logging.info('Создали промт')
+        return prompt
+    except KeyError:
+        return
 
 
-def ask_gpt(collection, user_content):
+def ask_gpt(collection, mode='continue'):
     url = 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion'
     headers = {
         'Authorization': f'Bearer {iam_token}',
@@ -33,20 +36,27 @@ def ask_gpt(collection, user_content):
         "completionOptions": {
             "stream": False,
             "temperature": 0.6,
-            "maxTokens": MAX_TOKENS_IN_SESSION
+            "maxTokens": 40
         },
         "messages": [
-            {'role': 'system', 'text': user_content['system_content']},
-            {'role': 'user', 'text': user_content['user_content']},
-            {"role": "assistant", "content": user_content['assistant_content']}
+            # {'role': 'system', 'text': user_content['system_content']},
+            # {'role': 'user', 'text': user_content['user_content']},
+            # {"role": "assistant", "content": user_content['assistant_content']}
         ]
     }
 
     for row in collection:
+        content = row['content']
+
+        if mode == "continue" and row['role'] == "user":
+            content += '\n' + CONTINUE_STORY
+        elif mode == "end" and row['role'] == "user":
+            content += '\n' + END_STORY
+
         data["messages"].append(
             {
                 "role": row["role"],
-                "text": row["text"]
+                "text": content
             }
         )
 
