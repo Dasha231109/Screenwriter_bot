@@ -1,6 +1,5 @@
 import sqlite3
 
-
 DB_NAME = 'sqlite.db'
 DB_TABLE_USERS_NAME = 'prompts'
 
@@ -12,7 +11,6 @@ def create_db(database_name=DB_NAME):
 
 
 def execute_query(sql_query, data=None, db_path=f'{DB_NAME}'):
-
     connection = sqlite3.connect(db_path)
     cursor = connection.cursor()
     if data:
@@ -63,40 +61,48 @@ def clean_table(table_name):
 
 def insert_row(values):
     columns = '(user_id, role, content, date, tokens, session_id)'
-    sql_query = f'''INSERT INTO {DB_TABLE_USERS_NAME} {columns} VALUES (?, ?, ?, ?, ?)'''
+    sql_query = f'''INSERT INTO {DB_TABLE_USERS_NAME} {columns} VALUES (?, ?, ?, ?, ?, ?)'''
     execute_query(sql_query, values)
 
 
 def is_value_in_table(table_name, column_name, value):
     check = f'''SELECT {column_name} FROM {table_name} WHERE {column_name} = ? LIMIT 1'''
-    rows = execute_selection_query(check, (value, ))
+    rows = execute_selection_query(check, (value,))
     return rows
 
 
-def distinct_data(column_name):
-    sql_query = f'''SELECT DISTINCT {column_name} FROM {DB_TABLE_USERS_NAME}'''
+def distinct_data():
+    sql_query = f'''SELECT DISTINCT user_id FROM {DB_TABLE_USERS_NAME}'''
     return execute_selection_query(sql_query)
 
 
-
-
-
-def delete_user(user_id):
+def update_row_value(user_id, column_name, new_value, column_name1, value):
     if is_value_in_table(DB_TABLE_USERS_NAME, 'user_id', user_id):
-        user_delete = f'''DELETE FROM {DB_TABLE_USERS_NAME} WHERE user_id = ?'''
-        execute_query(user_delete, (user_id, ))
-
-
-def update_row_value(user_id, column_name, new_value):
-    if is_value_in_table(DB_TABLE_USERS_NAME, 'user_id', user_id):
-        update = f'''UPDATE {DB_TABLE_USERS_NAME} SET {column_name} = ? WHERE user_id = ?'''
-        execute_query(update, (new_value, user_id, ))
+        update = f'''UPDATE {DB_TABLE_USERS_NAME} SET {column_name} = ? WHERE {column_name1} = ?'''
+        execute_query(update, (new_value, value,))
 
 
 def get_data_for_user(user_id, column_name):
     if is_value_in_table(DB_TABLE_USERS_NAME, 'user_id', user_id):
-        receive = f'''SELECT {column_name} FROM {DB_TABLE_USERS_NAME} WHERE user_id = ? LIMIT 1'''
-        return execute_selection_query(receive, (user_id, ))
+        receive = f'''SELECT {column_name} FROM {DB_TABLE_USERS_NAME} WHERE user_id = ? ORDER BY date DESC LIMIT 1'''
+        return execute_selection_query(receive, (user_id,))
+
+
+# def get_row_by_user_id()  # получить последнюю строку юзера
+def get_dialogue_for_user(user_id, session_id):  # получить все промты из определённой сессии
+    if is_value_in_table(DB_TABLE_USERS_NAME, 'user_id', user_id):
+        sql_query = f'''SELECT * FROM {DB_TABLE_USERS_NAME}
+         WHERE user_id = ? AND tokens IS NOT NULL AND session_id = ?
+         ORDER BY date ASC'''
+        return execute_selection_query(sql_query, (user_id, session_id, ))
+
+
+def get_size_of_session(user_id, session_id):  # получить количество токенов в указанной сессии
+    if is_value_in_table(DB_TABLE_USERS_NAME, 'user_id', user_id):
+        sql_query = f'''SELECT tokens FROM {DB_TABLE_USERS_NAME} 
+        WHERE user_id = ? AND session_id = ? 
+        ORDER BY date DESC LIMIT 1'''
+        return execute_selection_query(sql_query, (user_id, session_id,))
 
 
 def prepare_db(clean_if_exists=False):

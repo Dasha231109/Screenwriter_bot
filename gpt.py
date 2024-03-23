@@ -1,46 +1,93 @@
+import logging
+from limitation import *
 import requests
+from config import *
 
 
-def ask_gpt(text):
-    iam_token = ('t1.9euelZqVzMiZkZfHk4yJkJKVjYqNi-3rnpWalouPmsiKkJDOjpWSmsyKjI_l8_dAbgpQ'
-                 '-e8SYiwu_N3z9wAdCFD57xJiLC78zef1656VmsaSks6SxonJzpqZzMyOjIzO7_zF656VmsaSks6SxonJzpqZzMyOjIzOveuelZqUl'
-                 '8-KnpLMm82OjMaYnJGak7XehpzRnJCSj4qLmtGLmdKckJKPioua0pKai56bnoue0oye.ddoXv7mczFMZpVjK_-EYj_Y3Wd6_mod5r'
-                 'GoXuT4E6OdVAjrhymCBQKltN9fOcSWAeSz3_lcnIYKrKp0j5ai0Cw')
-    folder_id = 'b1gt97gj64dtkbtnaf0a'
+def create_prompt(current_choose, user_id):
+    prompt = SYSTEM_PROMPT
 
+    prompt += (f"\nНапиши начало истории в стиле {current_choose[user_id]['genre']} "
+               f"с главным героем {current_choose[user_id]['character']}. "
+               f"Вот начальный сеттинг: \n{current_choose[user_id]['location']}. \n"
+               "Начало должно быть коротким, 1-3 предложения.\n")
+
+    if current_choose[user_id]['info']:
+        prompt += (f"Также пользователь попросил учесть "
+                   f"следующую дополнительную информацию: {current_choose[user_id]['info']} ")
+
+    prompt += 'Не пиши никакие подсказки пользователю, что делать дальше. Он сам знает'
+
+    return prompt
+
+
+def ask_gpt(collection, user_content):
+    url = 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion'
     headers = {
         'Authorization': f'Bearer {iam_token}',
         'Content-Type': 'application/json'
     }
+
     data = {
-        "modelUri": f"gpt://{folder_id}/yandexgpt-lite",
+        "modelUri": f"gpt://{folder_id}/yandexgpt-lite/latest",
         "completionOptions": {
             "stream": False,
             "temperature": 0.6,
-            "maxTokens": 50
+            "maxTokens": MAX_TOKENS_IN_SESSION
         },
         "messages": [
-            {
-                "role": "user",
-                "text": text
-            }
+            {'role': 'system', 'text': user_content['system_content']},
+            {'role': 'user', 'text': user_content['user_content']},
+            {"role": "assistant", "content": user_content['assistant_content']}
         ]
     }
 
-    response = requests.post("https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
-                             headers=headers,
-                             json=data)
-
-    if response.status_code == 200:
-        text = response.json()["result"]["alternatives"][0]["message"]["text"]
-        return text
-    else:
-        raise RuntimeError(
-            'Invalid response received: code: {}, message: {}'.format(
-                {response.status_code}, {response.text}
-            )
+    for row in collection:
+        data["messages"].append(
+            {
+                "role": row["role"],
+                "text": row["text"]
+            }
         )
 
+    try:
+        response = requests.post(
+            url,
+            json=data,
+            headers=headers
+        )
+        if response.status_code != 200:
+            logging.debug(f"Response {response.json()} Status code:{response.status_code} Message {response.text}")
+            res = f'Произошла ошибка. Статус код {response.status_code}. Подробности в журнале'
+            return res
+        res = response.json()["result"]["alternatives"][0]["message"]["text"]
+    except Exception as e:
+        logging.error(f'Ошибка {e}')
+        res = 'Произошла непридвиденная ошибка'
 
-query = "Расскажи, какие бывают котики"
-print(ask_gpt(query))
+    return res
+
+
+if __name__ == '__main__':
+    session = 0
+    dialogue = [{'role': 'system', 'text': 'Ты помощник для решения задач по математике'}]
+
+    while session < MAX_SESSIONS:
+        user_text = input('Введи запрос к нейросети')
+        dialogue.append({'role': 'system', 'text': user_text})
+
+        tokens = count_tokens_in_dialogue(dialogue)
+
+        if tokens > MAX_TOKENS_IN_SESSION:
+            print('Превышен лимит токенов в сессии')
+            break
+        else:
+            print('Все ок')
+
+        result = ask_gpt(dialogue)
+        print(result)
+
+        dialogue.append({'role': 'assistant', 'text': result})
+        session += 1
+
+    print('Вы превысили лимит сессий')

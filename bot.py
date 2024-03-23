@@ -1,15 +1,14 @@
 # your_GPTassistant_bot
 # -----------------------------------------------------ИМПОРТЫ----------------------------------------------------------
-import logging
+import sqlite3
+import types
+
 import telebot
 from telebot import TeleBot
 from telebot.types import ReplyKeyboardMarkup
-from config import *
-from limitation import *
 import datetime
-
-# from gpt import GPT
-# from database import *
+from gpt import *
+from database import *
 
 # gpt = GPT()
 
@@ -55,10 +54,20 @@ def create_keyboard(buttons_list):
 
 @bot.message_handler(commands=['start', 'help'])
 def commands(message):
-    if is_limit_users():
-        bot.send_message(message.chat.id, "Извините, но количество пользователей превышено. Бот не доступен.")
-        exit()
+    time = datetime.datetime.now()
+    user_id = message.from_user.id
+
     if message.text == '/start':
+        create_db()
+        logging.info('Создали бд')
+
+        create_table(DB_TABLE_USERS_NAME)
+        logging.info('Создали таблицу если ее нет')
+
+        values = [user_id, 'None', 'None', time, 0, 0]
+        insert_row(values)
+        logging.info('Записали значения')
+
         name_user = message.from_user.first_name
         logging.info("Отправка приветственного сообщения")
         bot.send_message(message.chat.id, text=f"Привет, {name_user}\n"
@@ -66,6 +75,7 @@ def commands(message):
                                                f"интересных историй. Напиши /new_story чтобы создать новую историю. "
                                                f"Чтобы закончить пиши /end.",
                          reply_markup=create_keyboard(['/new_story']))
+
     if message.text == '/help':
         logging.info("Отправка помощи")
         bot.send_message(message.chat.id, text='Запустите бот командой /start\n'
@@ -80,18 +90,28 @@ def commands(message):
 
 @bot.message_handler(commands=['new_story'])
 def story(message):
+    if is_limit_users():
+        bot.send_message(message.chat.id, "Извините, но количество пользователей превышено. Бот недоступен.")
+        exit()
+
     logging.info('Новая история')
     user_id = message.from_user.id
-    time = datetime.time
-    print(time)
+    time = datetime.datetime.now()
 
-    create_db()
-    logging.info('Создали бд')
-    create_table(DB_TABLE_USERS_NAME)
-    logging.info('Создали таблицу если ее нет')
-    values = [user_id, 'None', 'None', time, 0, 0]
+    session_id = get_data_for_user(user_id, "session_id")[0][0]
+    session_id += 1
+    values = [user_id, 'None', 'None', time, 1, session_id]
     insert_row(values)
-    logging.info('Записали значения')
+    logging.info('Записали значение сессии')
+
+    if is_limit_sessions_id(user_id):
+        if session_id == MAX_SESSIONS - 1:
+            bot.send_message(message.chat.id, "Осталась 1 доступная сессия")
+            logging.info("Сообщили о том, что сессии заканчиваются")
+        else:
+            logging.info("Сообщили о том, что сессии закончились")
+            bot.send_message(message.chat.id, "Извините, но у вас закончились доступные сессии. Бот недоступен")
+            exit()
 
     bot.send_message(message.chat.id, text='Хорошо, давайте начнем! Какой жанр истории вы бы хотели?',
                      reply_markup=create_keyboard(genres))
@@ -182,13 +202,63 @@ def add_info(message):
 @bot.message_handler(commands=['begin'])
 def begin_story(message):
     user_id = message.from_user.id
-    info = str(message.text)
 
-    if info != "/begin":
-        create_keyboard()
-    else:
-        current_choose[user_id]['info'] = None
-        print(current_choose)
+    if get_data_for_user(user_id, 'session_id')[0][0] == 0:
+        bot.send_message(message.chat.id, text="Чтобы начать новую историю введите команду /new_story, и ответьте "
+                                               "пройдите опрос.",
+                         reply_markup=create_keyboard(['/new_story']))
 
+    if not current_choose[user_id]['genre']:
+        bot.send_message(message.chat.id, text="Кажется, вы не выбрали жанр, пожалуйста выберите один из предложенных "
+                                               "вариантов.",
+                         reply_markup=create_keyboard(genres))
+        bot.register_next_step_handler(message, choose_genre)
+
+    if not current_choose[user_id]['character']:
+        bot.send_message(message.chat.id, text="Кажется, вы не выбрали героя, пожалуйста выберите один из предложенных "
+                                               "вариантов.",
+                         reply_markup=create_keyboard(main_characters))
+        bot.register_next_step_handler(message, choose_characters)
+
+    if not current_choose[user_id]['location']:
+        bot.send_message(message.chat.id, text="Кажется, вы не выбрали сеттинг, пожалуйста выберите один из "
+                                               "предложенных вариантов.",
+                         reply_markup=create_keyboard(locations))
+        bot.register_next_step_handler(message, choose_locations)
+
+    start_story()
+
+
+@bot.message_handler(content_types=['text'])
+def start_story(message: types.Message, mode='continue'):
+    user_id: int = message.from_user.id
+    user_message: str = message.text
+
+    if mode == 'end':
+        user_message = END_STORY
+
+    row: sqlite3.Row = get_data_for_user(user_id, 'session_id')
+    collection: sqlite3.Row = get_dialogue_for_user(user_id, row['session_id'])
+    collection.append({'role': 'user', 'content': user_message})
+
+    tokens: int = count_tokens_in_dialogue(collection)
+    if is_limit_tokens(user_id, tokens):
+        return False
+
+    update_row_value(user_id, 'role', 'user', 'user_id', user_id)
+    update_row_value(user_id, 'content', user_message, 'role', 'user')
+
+
+@bot.message_handler(commands=['all_tokens'])
+def send_tokens(message):
+    try:
+        all_tokens = 'count_all_tokens_from_db()'
+        bot.send_message(message.chat.id, text=f'За все время использования бота\n'
+                                               f'Израсходовано токенов - {all_tokens}')
+    except Exception as e:
+        bot.send_message(message.chat.id, f'Извините. произошла ошибка: {e}')
+
+
+start_story()
 
 bot.infinity_polling()
