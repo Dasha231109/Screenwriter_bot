@@ -6,7 +6,7 @@ from telebot.types import ReplyKeyboardMarkup
 from telebot import types
 import datetime
 from gpt import *
-from database import *
+from limitation import *
 
 bot = TeleBot(TOKEN)
 MAX_LETTERS = MAX_TOKENS
@@ -34,9 +34,9 @@ def send_logs(message):
 
 
 # ----------------------------------------------------СПИСКИ И СЛОВАРИ--------------------------------------------------
-genres = ['Комедия', 'Детектив', 'Мистика']
+genres = ['Комедия', 'Приключения', 'Мистика']
 main_characters = ['Буратино', 'Крош', 'Шерлок Хомс', 'Мисс Марпл', 'Аннабель', 'Волан де Морт']
-locations = ['Пятерочка', 'Домик в деревне', 'Заколдованный замок']
+locations = ['Фэнтези средневековый мир', 'Колониальный Марс', 'Волшебный магазин "Пятерочка"']
 
 user_data = {}
 
@@ -51,26 +51,25 @@ def create_keyboard(buttons_list):
 @bot.message_handler(commands=['start', 'help'])
 def commands(message):
     user_id = message.from_user.id
-
     if message.text == '/start':
         user_data[user_id] = {
-            'session_id': 0,
             'genre': None,
             'character': None,
             'location': None,
             'info': None,
-            'test_mode': False,
-            'new_story': None
+            'state': None,
+            'test_mode': None,
+            'session_id': 0
         }
 
         create_db()
-        logging.info('Создали бд')
+        logging.info('1 Создали бд')
 
         create_table(DB_TABLE_USERS_NAME)
-        logging.info('Создали таблицу если ее нет')
+        logging.info('2 Создали таблицу если ее нет')
 
         name_user = message.from_user.first_name
-        logging.info("Отправка приветственного сообщения")
+        logging.info("3 Отправка приветственного сообщения")
         bot.send_message(message.chat.id, text=f"Привет, {name_user}\n"
                                                f"Я бот-сценарист, который может помочь с созданием уникальных и "
                                                f"интересных историй. Напиши /new_story чтобы создать новую историю. "
@@ -78,7 +77,7 @@ def commands(message):
                          reply_markup=create_keyboard(['/new_story']))
 
     if message.text == '/help':
-        logging.info("Отправка помощи")
+        logging.info("4 Отправка помощи")
         bot.send_message(message.chat.id, text='Запустите бот командой /start\n'
                                                'Начните новую историю командой /new_story\n'
                                                'Выберите жанр/главного героя/сеттинг\b'
@@ -89,17 +88,43 @@ def commands(message):
                          reply_markup=create_keyboard(['/new_story']))
 
 
+# ----------------------------------------------------ИСТОРИЯ-----------------------------------------------------------
 @bot.message_handler(commands=['new_story'])
 def story(message):
     user_id = message.from_user.id
+    date = datetime.datetime.now()
 
+    logging.info('5 Новая история')
     if is_limit_users():
+        logging.info('6 количество пользователей превышено')
         bot.send_message(message.chat.id, "Извините, но количество пользователей превышено. Бот недоступен.")
         return
 
+    if not is_value_in_table(DB_TABLE_USERS_NAME, 'user_id', user_id):
+        value = [user_id, '', '', date, 0, 0]
+        insert_row(value)
+
+    session_id = get_data_for_user(user_id, 'session_id', 'user_id', user_id)[0][0]
+    session_id += 1
+    user_data[user_id]['session_id'] = session_id
+
     try:
-        user_data[user_id]['new_story'] = "в истории"
-        logging.info('Новая история')
+        session_id = get_data_for_user(user_id, 'session_id', 'user_id', user_id)[0][0]
+        logging.info(f'7 session_id = {session_id}')
+
+        if is_limit_sessions_id(user_id):
+            if session_id == MAX_SESSIONS - 1:
+                bot.send_message(message.chat.id, "Осталась 1 доступная сессия")
+                logging.info("8 Сообщили о том, что сессии заканчиваются")
+            else:
+                logging.info("9 Сообщили о том, что сессии закончились")
+                bot.send_message(message.chat.id, "Извините, но у вас закончились доступные сессии. Бот недоступен")
+                return
+    except TypeError:
+        pass
+
+    try:
+        user_data[user_id]['state'] = "в истории"
 
         bot.send_message(message.chat.id, text='Хорошо, давайте начнем! Какой жанр истории вы бы хотели?',
                          reply_markup=create_keyboard(genres))
@@ -115,14 +140,14 @@ def choose_genre(message):
     genre = message.text
 
     if genre not in genres:
-        logging.info('Пользователь ввел не жанр')
+        logging.info('10 Пользователь ввел не жанр')
         bot.send_message(message.chat.id, text="Пожалуйста выберите один из предложенных вариантов",
                          reply_markup=create_keyboard(genres))
         bot.register_next_step_handler(message, choose_genre)
         return
 
     user_data[user_id]['genre'] = genre
-    logging.info('Сохранили жанр в словарь')
+    logging.info('11 Сохранили жанр в словарь')
 
     bot.send_message(message.chat.id, text='Хорошо, выберите главного героя',
                      reply_markup=create_keyboard(main_characters))
@@ -134,22 +159,20 @@ def choose_characters(message):
     character = message.text
 
     if character not in main_characters:
-        logging.info('Пользователь ввел не персонажа')
+        logging.info('12 Пользователь ввел не персонажа')
         bot.send_message(message.chat.id, text="Пожалуйста выберите один из предложенных вариантов",
                          reply_markup=create_keyboard(main_characters))
         bot.register_next_step_handler(message, choose_characters)
         return
 
     user_data[user_id]['character'] = character
-    logging.info('Сохранили персонажа в словарь')
+    logging.info('13 Сохранили персонажа в словарь')
 
     bot.send_message(message.chat.id, text='Отличный выбор, выберите сеттинг:\n'
-                                           '1) Пятерочка - cтрашный магазин, полон ужасов, находится один в '
-                                           'дремучем лесу.\n'
-                                           '2) Домик в деревне - маленький уютный домик, рядом растут деревья и '
-                                           'протекает река.\n'
-                                           '3) Заколдованный Замок - древнее место, окутанное тайнами и '
-                                           'легендами, находится в центре города.',
+                                           '1) Фэнтези средневековый мир - огромное королевство с магией.\n'
+                                           '2) Колониальный Марс - люди колонизировали Марс и построили там города.\n'
+                                           '3) Волшебный магазин "Пятерочка" -  место, где можно найти все, что угодно.'
+                     ,
                      reply_markup=create_keyboard(locations))
     bot.register_next_step_handler(message, choose_locations)
 
@@ -159,14 +182,14 @@ def choose_locations(message):
     location = message.text
 
     if location not in locations:
-        logging.info('Пользователь ввел не сеттинг')
+        logging.info('14 Пользователь ввел не сеттинг')
         bot.send_message(message.chat.id, text="Пожалуйста выберите один из предложенных вариантов",
                          reply_markup=create_keyboard(locations))
         bot.register_next_step_handler(message, choose_locations)
         return
 
     user_data[user_id]['location'] = location
-    logging.info('Сохранили сеттинг в словарь')
+    logging.info('15 Сохранили сеттинг в словарь')
 
     bot.send_message(message.chat.id, text="Супер! Получится крутая история, а чтобы она получилась еще круче можешь "
                                            "написать дополнительную информацию. Если хочешь уже начать пиши /begin",
@@ -180,10 +203,11 @@ def add_info(message):
 
     if info != '/begin':
         user_data[user_id]['info'] = info
-        logging.info('Сохранили доп. инфо. в словарь')
+        logging.info('16 Сохранили доп. инфо. в словарь')
         bot.send_message(message.chat.id, text='Отлично, вся информация будет учтена в истории. Чтобы начать введите '
                                                '/begin',
                          reply_markup=create_keyboard(['/begin']))
+        return
     else:
         begin_story(message)
 
@@ -193,23 +217,27 @@ def begin_story(message):
     user_id = message.from_user.id
 
     try:
-        if not user_data[user_id]['new_story']:
+        if not user_data[user_id]['state']:
+            logging.info("17 Пользователь не нажимал команду /new_story")
             bot.send_message(message.chat.id, text="Чтобы начать новую историю введите команду /new_story, и "
                                                    "пройдите опрос.",
                              reply_markup=create_keyboard(['/new_story']))
         elif not user_data[user_id]['genre']:
+            logging.info("18 не выбрали жанр")
             bot.send_message(message.chat.id, text="Кажется, вы не выбрали жанр, пожалуйста выберите один из "
                                                    "предложенных вариантов.",
                              reply_markup=create_keyboard(genres))
             bot.register_next_step_handler(message, choose_genre)
 
         elif not user_data[user_id]['character']:
+            logging.info('19 не выбрали героя')
             bot.send_message(message.chat.id, text="Кажется, вы не выбрали героя, пожалуйста выберите один из "
                                                    "предложенных вариантов.",
                              reply_markup=create_keyboard(main_characters))
             bot.register_next_step_handler(message, choose_characters)
 
         elif not user_data[user_id]['location']:
+            logging.info('20 не выбрали сеттинг')
             bot.send_message(message.chat.id, text="Кажется, вы не выбрали сеттинг, пожалуйста выберите один из "
                                                    "предложенных вариантов.",
                              reply_markup=create_keyboard(locations))
@@ -222,91 +250,126 @@ def begin_story(message):
     get_story(message)
 
 
-@bot.message_handler(content_types=['text'])
-def start_story(message: types.Message, mode='continue'):
-    user_id = message.from_user.id
-    user_message = message.text
-    time = datetime.datetime.now()
-
-    if mode == 'end':
-        user_message = END_STORY
-
-    session_id: int = get_data_for_user(user_id, 'session_id')[0][0]
-    collection = get_dialogue_for_user(user_id, session_id)
-    collection.append({'role': 'user', 'text': user_message})
-
-    tokens = count_tokens_in_dialogue(collection)
-    print(tokens)
-    if is_limit_tokens(user_id, tokens):
-        return
-
-    values = [user_id, 'user', user_message, time, tokens, session_id]
-    insert_row(values)
-
-    if is_limit_tokens(user_id, tokens):
-        return
-
-    gpt_text, result_for_test = ask_gpt(collection, mode)  # изменить ask_gpt
-
-    collection = get_dialogue_for_user(user_id, session_id)
-    collection.append({'role': 'assistant', 'text': gpt_text})
-    tokens: int = count_tokens_in_dialogue(collection)
-
-    values = [user_id, 'assistant', gpt_text, time, tokens, session_id]
-    insert_row(values)
-
-    if not user_data[user_id]['test_mode']:
-        bot.send_message(message.chat.id, text=gpt_text,
-                         reply_markup=create_keyboard(['/end']))
-    else:
-        bot.send_message(message.chat.id, text=result_for_test,
-                         reply_markup=create_keyboard(['/end']))
-
-
-@bot.message_handler(content_types=['text'])
+# ----------------------------------------------------ОБРАБОТКА ИСТОРИИ-------------------------------------------------
 def get_story(message: types.Message):
     user_id = message.from_user.id
     time = datetime.datetime.now()
 
-    session_id = 1
-    if is_value_in_table(DB_TABLE_USERS_NAME, 'user_id', user_id):
-        row = get_data_for_user(user_id, 'session_id')[0][0]
-        session_id = row + 1
-        print(session_id)
+    session_id = user_data[user_id]['session_id']
 
-    if is_limit_sessions_id(user_id):
-        if session_id == MAX_SESSIONS:
-            bot.send_message(message.chat.id, "Осталась 1 доступная сессия")
-            logging.info("Сообщили о том, что сессии заканчиваются")
+    prompt = create_prompt(user_data, user_id)
+
+    if user_data[user_id]['state'] == 'продолжение от пользователя':
+        user_prompt = get_data_for_user(user_id, 'content', 'role', 'user')[0][0]
+        if user_prompt == END_STORY:
+            bot.register_next_step_handler(message, end)
         else:
-            logging.info("Сообщили о том, что сессии закончились")
-            bot.send_message(message.chat.id, "Извините, но у вас закончились доступные сессии. Бот недоступен")
-            return
+            gpt_prompt = get_data_for_user(user_id, 'content', 'role', 'assistant')[0][0]
+            prompt += f'{gpt_prompt}  {user_prompt} - {CONTINUE_STORY}'
 
-    user_story = create_prompt(user_data, user_id)
+    collection = [{'role': 'system', 'content': prompt}]
 
-    collection = get_dialogue_for_user(user_id, session_id)
-    collection.append({'role': 'system', 'text': user_story})
-    tokens: int = count_tokens_in_dialogue(collection)
+    tokens_system = count_tokens_in_dialogue(collection)
 
     bot.send_message(message.chat.id, "Генерирую...")
 
-    values = [user_id, 'system', user_story, time, tokens, session_id]
+    logging.info('21 В таблице есть юзер, прибавляем к сессиям 1')
+
+    if is_value_in_table(DB_TABLE_USERS_NAME, 'user_id', user_id):
+        if user_data[user_id]['state'] == 'продолжение от пользователя':
+            tokens = get_tokens(user_id, session_id)
+            tokens1 = tokens[0][0]
+            tokens2 = tokens[1][0]
+            tokens3 = tokens[2][0]
+            token = tokens1 + tokens2 + tokens3
+
+            if is_limit_tokens_in_session(user_id, token):
+                bot.send_message(message.chat.id, 'Извините, но токены в данной сессии закончились. Чтобы начать новую '
+                                                  'историю введите команду /new_story',
+                                 reply_markup=create_keyboard(['/new_story']))
+                return
+
+    values = [user_id, 'system', prompt, time, tokens_system, session_id]
     insert_row(values)
 
-    collection = get_dialogue_for_user(user_id, session_id)
+    gpt_text = ask_gpt(collection)
+    result_for_test = ask_gpt(collection)
+    collection.append({'role': 'assistant', 'content': gpt_text})
 
-    gpt_text, result_for_test = ask_gpt(collection)
-    collection.append({'role': 'assistant', 'text': gpt_text})
+    tokens_assistant = count_tokens_in_dialogue(collection)
 
-    tokens: int = count_tokens_in_dialogue(collection)
-    if is_limit_tokens(user_id, tokens):
+    values = [user_id, 'assistant', gpt_text, time, tokens_assistant, session_id]
+    insert_row(values)
+
+    if not user_data[user_id]['test_mode']:
+        bot.send_message(message.chat.id, gpt_text, reply_markup=create_keyboard(['/end']))
+    else:
+        bot.send_message(message.chat.id, result_for_test, reply_markup=create_keyboard(['/end']))
+        bot.register_next_step_handler(message, end)
         return
 
-    values = [user_id, ]
-    insert_row()
+
+@bot.message_handler(content_types=['text'])
+def continuation(message: types.Message, mode='continue'):
+    user_id = message.from_user.id
+    user_message = message.text
+    time = datetime.datetime.now()
+
+    if not user_message:
+        logging.info("Проверка на текстовое сообщение")
+        bot.send_message(user_id, "Необходимо отправить именно текстовое сообщение.")
+        bot.register_next_step_handler(message, continuation)
+        return
+
+    try:
+        if not user_data[user_id]['state']:
+            logging.info("17 Пользователь не нажимал команду /new_story")
+            bot.send_message(message.chat.id, text="Чтобы начать новую историю введите команду /new_story, и "
+                                                   "пройдите опрос.",
+                             reply_markup=create_keyboard(['/new_story']))
+    except KeyError:
+        bot.send_message(message.chat.id, text="Чтобы начать введите команду /start",
+                         reply_markup=create_keyboard(['/start']))
+
+    if user_message == '/end':
+        user_message = END_STORY
+        user_data[user_id]['test_mode'] = 'end'
+
+    session_id = get_data_for_user(user_id, 'session_id', 'user_id', user_id)[0][0]
+
+    collection = [{'role': 'user', 'content': user_message}]
+
+    tokens_user = count_tokens_in_dialogue(collection)
+
+    if is_limit_tokens(user_id, tokens_user):
+        bot.send_message(message.chat.id, text='Ваше сообщение превышает лимит. Пожалуйста сократите сообщение и '
+                                               'отправьте еще раз.')
+        bot.register_next_step_handler(message, continuation)
+        return
+
+    values = [user_id, 'user', user_message, time, tokens_user, session_id]
+    insert_row(values)
+    try:
+        user_data[user_id]['state'] = 'продолжение от пользователя'
+    except KeyError:
+        bot.send_message(message.chat.id, text="Чтобы начать введите команду /start",
+                         reply_markup=create_keyboard(['/start']))
+
+    get_story(message)
+    # gpt_text = ask_gpt(collection)
+    #
+    # collection.append({'role': 'assistant', 'content': gpt_text})
+    # print(collection, 'bot 4')
+    #
+    # tokens_assistant = count_tokens_in_dialogue(collection)
+    #
+    # values = [user_id, 'assistant', gpt_text, time, tokens_assistant, session_id]
+    # insert_row(values)
+    #
+    # bot.send_message(message.chat.id, gpt_text)
 
 
+# ---------------------------------------------------ТОКЕНЫ-------------------------------------------------------------
 @bot.message_handler(commands=['all_tokens'])
 def send_tokens(message):
     try:
@@ -318,6 +381,7 @@ def send_tokens(message):
         bot.send_message(message.chat.id, f'Извините. произошла ошибка: {e}')
 
 
+# ----------------------------------------------------КОНЕЦ-------------------------------------------------------------
 @bot.message_handler(commands=['end'])
 def end(message):
     user_id = message.from_user.id
@@ -325,7 +389,7 @@ def end(message):
         bot.send_message(message.chat.id, text="Кажется, вы еще не начали историю. Чтобы начать введи команду /begin",
                          reply_markup=create_keyboard(['/begin']))
 
-    start_story(message, 'end')
+    continuation(message, '/end')
     bot.send_message(message.chat.id, text="У нас получилась замечательная история. Приходи еще!",
                      reply_markup=create_keyboard(['/new_story']))
 
