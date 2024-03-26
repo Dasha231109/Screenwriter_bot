@@ -76,14 +76,21 @@ def distinct_data():
     return execute_selection_query(sql_query)
 
 
-def get_data_for_user(user_id, column_name):
+def get_data_for_user(user_id, column_name, column_name1, value):
     if is_value_in_table(DB_TABLE_USERS_NAME, 'user_id', user_id):
-        receive = f'''SELECT {column_name} FROM {DB_TABLE_USERS_NAME} WHERE user_id = ? ORDER BY date DESC LIMIT 1'''
-        return execute_selection_query(receive, (user_id,))
+        receive = f'''SELECT {column_name} FROM {DB_TABLE_USERS_NAME} WHERE {column_name1} = ? ORDER BY date DESC 
+        LIMIT 1'''
+        return execute_selection_query(receive, (value,))
 
 
-# def get_row_by_user_id()  # получить последнюю строку юзера
-def get_dialogue_for_user(user_id, session_id):  # получить все промты из определённой сессии
+def get_tokens(user_id, session_id):
+    if is_value_in_table(DB_TABLE_USERS_NAME, 'user_id', user_id):
+        receive = f'''SELECT tokens FROM {DB_TABLE_USERS_NAME} WHERE user_id = ? and session_id = ? ORDER BY date 
+        DESC LIMIT 3'''
+        return execute_selection_query(receive, (user_id, session_id, ))
+
+
+def get_dialogue_for_user(user_id, session_id):
     if is_value_in_table(DB_TABLE_USERS_NAME, 'user_id', user_id):
         sql_query = f'''SELECT content FROM {DB_TABLE_USERS_NAME}
          WHERE user_id = ? AND tokens IS NOT NULL AND session_id = ?

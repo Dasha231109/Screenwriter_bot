@@ -1,12 +1,22 @@
 import logging
+import os
+
 import requests
 from config import *
+
+
+# def create_new_token():
+#     metadata = metadata_url
+#     headers = {"Metadata-Flavor": "Google"}
+#     token_dir = os.path.dirname(TOKEN_PATH)
+#     response = requests.get(metadata_url, headers=headers)
+#     return response.json()
 
 
 def create_prompt(user_data, user_id):
     prompt = SYSTEM_PROMPT
     try:
-        prompt += 'Комедия, Крош, Пятерочка'  # (f"\nНапиши начало истории в стиле {user_data[user_id]['genre']} "
+        prompt += 'Комедия, Крош, Парк'# (f"\nНапиши начало истории в стиле {user_data[user_id]['genre']} "
         #            f"с главным героем {user_data[user_id]['character']}. "
         #            f"Вот начальный сеттинг: \n{user_data[user_id]['location']}. \n"
         #            "Начало должно быть коротким, 1-3 предложения.\n")
@@ -17,7 +27,7 @@ def create_prompt(user_data, user_id):
             prompt += (f"Также пользователь попросил учесть "
                        f"следующую дополнительную информацию: {user_data[user_id]['info']}. ")
 
-        prompt += 'Не пиши никакие подсказки пользователю, что делать дальше. Он сам знает'
+        prompt += 'Не пиши никакие подсказки пользователю, что делать дальше. Он сам знает\n '
         logging.info('Создали промт')
         return prompt
     except KeyError:
@@ -38,11 +48,7 @@ def ask_gpt(collection, mode='continue'):
             "temperature": 0.6,
             "maxTokens": 40
         },
-        "messages": [
-            # {'role': 'system', 'text': user_content['system_content']},
-            # {'role': 'user', 'text': user_content['user_content']},
-            # {"role": "assistant", "content": user_content['assistant_content']}
-        ]
+        "messages": []
     }
 
     for row in collection:
@@ -78,26 +84,3 @@ def ask_gpt(collection, mode='continue'):
     return res
 
 
-if __name__ == '__main__':
-    session = 0
-    dialogue = [{'role': 'system', 'text': 'Ты помощник для решения задач по математике'}]
-
-    while session < MAX_SESSIONS:
-        user_text = input('Введи запрос к нейросети')
-        dialogue.append({'role': 'system', 'text': user_text})
-
-        tokens = count_tokens_in_dialogue(dialogue)
-
-        if tokens > MAX_TOKENS_IN_SESSION:
-            print('Превышен лимит токенов в сессии')
-            break
-        else:
-            print('Все ок')
-
-        result = ask_gpt(dialogue)
-        print(result)
-
-        dialogue.append({'role': 'assistant', 'text': result})
-        session += 1
-
-    print('Вы превысили лимит сессий')

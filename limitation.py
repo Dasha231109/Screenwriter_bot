@@ -1,11 +1,9 @@
-import sqlite3
-
 import requests
 from config import *
 from database import *
 
 
-def is_limit_users():  # лимит юзеров
+def is_limit_users():
     users = distinct_data()
     count = 0
     for i in users:
@@ -13,13 +11,20 @@ def is_limit_users():  # лимит юзеров
     return count >= MAX_USERS
 
 
-def is_limit_sessions_id(user_id):  # лимит сессий
+def is_limit_sessions_id(user_id):
     if not is_value_in_table(DB_TABLE_USERS_NAME, 'user_id', user_id):
         return False
 
     session_id = get_data_for_user(user_id, "session_id")[0][0]
 
     return session_id == MAX_SESSIONS - 1 or session_id >= MAX_SESSIONS
+
+
+def is_limit_tokens_in_session(user_id, tokens):
+    if not is_value_in_table(DB_TABLE_USERS_NAME, 'user_id', user_id):
+        return False
+
+    return tokens > MAX_TOKENS_IN_SESSION
 
 
 def is_limit_tokens(user_id, tokens):
@@ -41,8 +46,6 @@ def count_tokens_in_dialogue(messages: sqlite3.Row):
     }
 
     for row in messages:
-        print(messages, 'limi2')
-        print(row, 'limi1')
         data["messages"].append(
             {
                 "role": row["role"],
@@ -57,28 +60,3 @@ def count_tokens_in_dialogue(messages: sqlite3.Row):
             headers=headers
         ).json()["tokens"]
     )
-
-
-if __name__ == '__main__':
-    session = 0
-    dialogue = [{'role': 'system', 'text': 'Ты помощник для решения задач по математике'}]
-
-    while session < MAX_SESSIONS:
-        user_text = input('Введи запрос к нейросети')
-        dialogue.append({'role': 'system', 'text': user_text})
-
-        c_tokens = count_tokens_in_dialogue(dialogue)
-
-        if c_tokens > MAX_TOKENS_IN_SESSION:
-            print('Превышен лимит токенов в сессии')
-            break
-        else:
-            print('Все ок')
-
-        result = ask_gpt(dialogue, '')
-        print(result)
-
-        dialogue.append({'role': 'assistant', 'text': result})
-        session += 1
-
-    print('Вы превысили лимит сессий')
