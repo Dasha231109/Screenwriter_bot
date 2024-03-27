@@ -1,7 +1,5 @@
 # your_GPTassistant_bot
 # -----------------------------------------------------ИМПОРТЫ----------------------------------------------------------
-import sqlite3
-
 import telebot
 from telebot import TeleBot
 from telebot.types import ReplyKeyboardMarkup
@@ -11,7 +9,6 @@ from gpt import *
 from limitation import *
 
 bot = TeleBot(TOKEN)
-MAX_LETTERS = MAX_TOKENS
 
 # ------------------------------------------------------ЛОГГИРОВАНИЕ----------------------------------------------------
 logging.basicConfig(
@@ -24,15 +21,11 @@ logging.basicConfig(
 
 @bot.message_handler(commands=['debug'])
 def send_logs(message):
-    user_id = message.chat.id
-    if user_id == 1377946178:
-        try:
-            with open("log_file.txt", "rb") as f:
-                bot.send_document(message.chat.id, f)
-        except telebot.apihelper.ApiTelegramException:
-            bot.send_message(message.chat.id, "Простите, но я не могу предоставить вам логи, так как их нет.")
-    else:
-        bot.send_message(message.chat.id, "Вы не можете пользоваться этой командой, так как у вас недостаточно прав.")
+    try:
+        with open("log_file.txt", "rb") as f:
+            bot.send_document(message.chat.id, f)
+    except telebot.apihelper.ApiTelegramException:
+        bot.send_message(message.chat.id, "Простите, но я не могу предоставить вам логи, так как их нет.")
 
 
 # ----------------------------------------------------СПИСКИ И СЛОВАРИ--------------------------------------------------
@@ -110,10 +103,11 @@ def story(message):
     session_id = get_data_for_user(user_id, 'session_id', 'user_id', user_id)[0][0]
     session_id += 1
     logging.info('Каждый раз когда пользователь будет вводить команду /new_story сессии будут прибавляться')
-    user_data[user_id]['session_id'] = session_id
-    logging.info(f'Запомнили кол-во сессий в словарь: session_id = {session_id}')
 
     try:
+        user_data[user_id]['session_id'] = session_id
+        logging.info(f'Запомнили кол-во сессий в словарь: session_id = {session_id}')
+
         if is_limit_sessions_id(user_id):
             logging.info('Проверяем лимит сессий')
             if session_id == MAX_SESSIONS - 1:
@@ -241,12 +235,15 @@ def begin_story(message):
             bot.send_message(message.chat.id, text="Чтобы начать новую историю введите команду /new_story, и "
                                                    "пройдите опрос.",
                              reply_markup=create_keyboard(['/new_story']))
+            return
+
         elif not user_data[user_id]['genre']:
             logging.info("не выбрали жанр")
             bot.send_message(message.chat.id, text="Кажется, вы не выбрали жанр, пожалуйста выберите один из "
                                                    "предложенных вариантов.",
                              reply_markup=create_keyboard(genres))
             bot.register_next_step_handler(message, choose_genre)
+            return
 
         elif not user_data[user_id]['character']:
             logging.info('не выбрали героя')
@@ -254,6 +251,7 @@ def begin_story(message):
                                                    "предложенных вариантов.",
                              reply_markup=create_keyboard(main_characters))
             bot.register_next_step_handler(message, choose_characters)
+            return
 
         elif not user_data[user_id]['setting']:
             logging.info('не выбрали сеттинг')
@@ -261,11 +259,16 @@ def begin_story(message):
                                                    "предложенных вариантов.",
                              reply_markup=create_keyboard(settings))
             bot.register_next_step_handler(message, choose_setting)
+            return
 
+        user_data[user_id]['state'] = "начало истории"
     except KeyError:
         logging.info('Пользователь не вводил команду /start')
         bot.send_message(message.chat.id, text="Чтобы начать введите команду /start",
                          reply_markup=create_keyboard(['/start']))
+        return
+
+
 
     get_story(message)
 
@@ -275,13 +278,11 @@ def get_story(message: types.Message):
     user_id = message.from_user.id
     time = datetime.datetime.now()
 
-    user_data[user_id]['state'] = "начало истории"
-
     session_id = user_data[user_id]['session_id']
     logging.info('Взяли из словаря кол-во сессий')
 
     prompt = create_prompt(user_data, user_id)
-    logging.info('Создали промт')
+    logging.info('Взяли промт')
 
     if user_data[user_id]['state'] == 'продолжение от пользователя':
         logging.info('Если пользователь продолжил, добавляем в промт его продолжение')
@@ -343,10 +344,6 @@ def continuation(message: types.Message):
         bot.send_message(message.chat.id, text="Чтобы начать введите команду /start",
                          reply_markup=create_keyboard(['/start']))
 
-    if user_data[user_id]['state'] == "начало истории":
-        bot.send_message(message.chat.id, "Чтобы начать историю введите команду /begin")
-        return
-
     if not user_message:
         logging.info("Проверка на текстовое сообщение")
         bot.send_message(user_id, "Необходимо отправить именно текстовое сообщение.")
@@ -359,6 +356,8 @@ def continuation(message: types.Message):
     collection = [{'role': 'user', 'content': user_message}]
 
     if message.text == 'Конец':
+        user_data[user_id]['state'] = 'конец'
+
         logging.info('Пользователь заканчивает историю')
         user_message = END_STORY
         tokens_user = count_tokens_in_dialogue(collection)
@@ -420,12 +419,27 @@ def continuation(message: types.Message):
 def end(message):
     logging.info('Перешли к концу')
     user_id = message.from_user.id
-    if not is_value_in_table(DB_TABLE_USERS_NAME, 'user_id', user_id):
-        bot.send_message(message.chat.id, text="Кажется, вы еще не начали историю. Чтобы начать введи команду /begin",
-                         reply_markup=create_keyboard(['/begin']))
+    try:
+        if user_data[user_id]['state'] != 'конец':
+            bot.send_message(message.chat.id,
+                             text="Кажется, вы еще не начали историю. Чтобы начать введи команду /begin",
+                             reply_markup=create_keyboard(['/begin']))
+            return
+    except KeyError:
+        bot.send_message(message.chat.id, text="Чтобы начать введите команду /start",
+                         reply_markup=create_keyboard(['/start']))
+        return
 
     bot.send_message(message.chat.id, text="У нас получилась замечательная история. Приходи еще!",
                      reply_markup=create_keyboard(['/new_story']))
+
+
+# ------------------------------------------------------ДРУГОЕ----------------------------------------------------------
+@bot.message_handler(commands=['clean_table'])
+def clean(message):
+    clean_table(DB_TABLE_USERS_NAME)
+    bot.send_message(message.chat.id, "Таблица успешно очищена")
+    logging.info('Таблица успешно очищена')
 
 
 bot.infinity_polling()

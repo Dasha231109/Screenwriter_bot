@@ -1,25 +1,15 @@
 import logging
-import os
-
 import requests
 from config import *
-
-
-def create_new_token():
-    metadata = metadata_url
-    headers = {"Metadata-Flavor": "Google"}
-    token_dir = os.path.dirname(TOKEN_PATH)
-    response = requests.get(metadata_url, headers=headers)
-    return response.json()
 
 
 def create_prompt(user_data, user_id):
     prompt = SYSTEM_PROMPT
     try:
-        prompt += 'Комедия, Крош, Парк'# (f"\nНапиши начало истории в стиле {user_data[user_id]['genre']} "
-        #            f"с главным героем {user_data[user_id]['character']}. "
-        #            f"Вот начальный сеттинг: \n{user_data[user_id]['location']}. \n"
-        #            "Начало должно быть коротким, 1-3 предложения.\n")
+        prompt += (f"\nНапиши начало истории в стиле {user_data[user_id]['genre']} "
+                   f"с главным героем {user_data[user_id]['character']}. "
+                   f"Вот начальный сеттинг: \n{user_data[user_id]['setting']}. \n"
+                   "Начало должно быть коротким, 1-3 предложения.\n")
 
         logging.info('Создали промт на основе данных пользователя')
         if user_data[user_id]['info']:
@@ -34,7 +24,7 @@ def create_prompt(user_data, user_id):
         return
 
 
-def ask_gpt(collection, mode='continue'):
+def ask_gpt(collection):
     url = 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion'
     headers = {
         'Authorization': f'Bearer {iam_token}',
@@ -46,7 +36,7 @@ def ask_gpt(collection, mode='continue'):
         "completionOptions": {
             "stream": False,
             "temperature": 0.6,
-            "maxTokens": 40
+            "maxTokens": 500
         },
         "messages": []
     }
@@ -77,5 +67,3 @@ def ask_gpt(collection, mode='continue'):
         res = 'Произошла непридвиденная ошибка'
 
     return res
-
-
