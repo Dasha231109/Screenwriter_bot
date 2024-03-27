@@ -5,12 +5,12 @@ import requests
 from config import *
 
 
-# def create_new_token():
-#     metadata = metadata_url
-#     headers = {"Metadata-Flavor": "Google"}
-#     token_dir = os.path.dirname(TOKEN_PATH)
-#     response = requests.get(metadata_url, headers=headers)
-#     return response.json()
+def create_new_token():
+    metadata = metadata_url
+    headers = {"Metadata-Flavor": "Google"}
+    token_dir = os.path.dirname(TOKEN_PATH)
+    response = requests.get(metadata_url, headers=headers)
+    return response.json()
 
 
 def create_prompt(user_data, user_id):
@@ -53,11 +53,6 @@ def ask_gpt(collection, mode='continue'):
 
     for row in collection:
         content = row['content']
-
-        if mode == "continue" and row['role'] == "user":
-            content += '\n' + CONTINUE_STORY
-        elif mode == "end" and row['role'] == "user":
-            content += '\n' + END_STORY
 
         data["messages"].append(
             {
