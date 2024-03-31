@@ -1,5 +1,4 @@
 # your_GPTassistant_bot
-# -----------------------------------------------------ИМПОРТЫ----------------------------------------------------------
 import telebot
 from telebot import TeleBot
 from telebot.types import ReplyKeyboardMarkup
@@ -10,7 +9,7 @@ from limitation import *
 
 bot = TeleBot(TOKEN)
 
-# ------------------------------------------------------ЛОГГИРОВАНИЕ----------------------------------------------------
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -28,7 +27,6 @@ def send_logs(message):
         bot.send_message(message.chat.id, "Простите, но я не могу предоставить вам логи, так как их нет.")
 
 
-# ----------------------------------------------------СПИСКИ И СЛОВАРИ--------------------------------------------------
 genres = ['Комедия', 'Приключения', 'Мистика']
 main_characters = ['Буратино', 'Крош', 'Шерлок Хомс', 'Мисс Марпл', 'Аннабель', 'Волан де Морт']
 settings = ['Фэнтези средневековый мир', 'Колониальный Марс', 'Волшебный магазин "Пятерочка"']
@@ -36,7 +34,6 @@ settings = ['Фэнтези средневековый мир', 'Колониа�
 user_data = {}
 
 
-# ---------------------------------------------------------БОТ----------------------------------------------------------
 def create_keyboard(buttons_list):
     keyboard = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True, one_time_keyboard=True)
     keyboard.add(*buttons_list)
@@ -83,7 +80,6 @@ def commands(message):
                          reply_markup=create_keyboard(['/new_story']))
 
 
-# ----------------------------------------------------ИСТОРИЯ-----------------------------------------------------------
 @bot.message_handler(commands=['new_story'])
 def story(message):
     user_id = message.from_user.id
@@ -268,12 +264,9 @@ def begin_story(message):
                          reply_markup=create_keyboard(['/start']))
         return
 
-
-
     get_story(message)
 
 
-# ----------------------------------------------------СОЗДАНИЕ_ИСТОРИИ--------------------------------------------------
 def get_story(message: types.Message):
     user_id = message.from_user.id
     time = datetime.datetime.now()
@@ -414,7 +407,6 @@ def continuation(message: types.Message):
     get_story(message)
 
 
-# ----------------------------------------------------КОНЕЦ-------------------------------------------------------------
 @bot.message_handler(commands=['end'])
 def end(message):
     logging.info('Перешли к концу')
@@ -434,7 +426,6 @@ def end(message):
                      reply_markup=create_keyboard(['/new_story']))
 
 
-# ------------------------------------------------------ДРУГОЕ----------------------------------------------------------
 @bot.message_handler(commands=['clean_table'])
 def clean(message):
     clean_table(DB_TABLE_USERS_NAME)
